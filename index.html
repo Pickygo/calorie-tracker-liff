@@ -27,6 +27,19 @@
   .toast.show { display: block; }
   .toast.ok { background: #e1f5ee; color: #0f6e56; }
   .toast.err { background: #fcebeb; color: #791f1f; }
+  .seg { display: flex; gap: 8px; margin-bottom: 16px; }
+  .seg-btn { flex: 1; padding: 10px 4px; border: 1px solid #ccc; border-radius: 10px; background: #fff; font-size: 0.95rem; }
+  .seg-btn.active { background: #222; color: #fff; border-color: #222; }
+  .stat-grid { display: flex; gap: 10px; margin-bottom: 16px; }
+  .stat-box { flex: 1; background: #fff; border-radius: 12px; padding: 14px; text-align: center; }
+  .stat-box .num { font-size: 1.4rem; font-weight: bold; display: block; }
+  .stat-box .lbl { font-size: 0.8rem; color: #888; }
+  .day-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 0.95rem; }
+  .day-row:last-child { border-bottom: none; }
+  .day-badge { font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; font-weight: bold; }
+  .day-badge.over { background: #fcebeb; color: #791f1f; }
+  .day-badge.under { background: #e1f5ee; color: #0f6e56; }
+  .day-badge.none { background: #eee; color: #999; }
 </style>
 </head>
 <body>
@@ -38,6 +51,7 @@
   <button class="tab-btn active" data-tab="summary">สรุป</button>
   <button class="tab-btn" data-tab="food">อาหาร</button>
   <button class="tab-btn" data-tab="exercise">ออกกำลังกาย</button>
+  <button class="tab-btn" data-tab="report">รายงาน</button>
   <button class="tab-btn" data-tab="profile">โปรไฟล์</button>
 </div>
 
@@ -97,8 +111,27 @@
   </div>
 </div>
 
+<div id="report" class="section">
+  <div class="seg">
+    <button class="seg-btn active" data-days="7" onclick="setReportRange(7)">7 วัน</button>
+    <button class="seg-btn" data-days="30" onclick="setReportRange(30)">30 วัน</button>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-box"><span class="num" id="r-over" style="color:#a32d2d">-</span><span class="lbl">วันเกินเป้า</span></div>
+    <div class="stat-box"><span class="num" id="r-under" style="color:#0f6e56">-</span><span class="lbl">วันต่ำกว่าเป้า</span></div>
+    <div class="stat-box"><span class="num" id="r-avg">-</span><span class="lbl">เฉลี่ย/วัน</span></div>
+  </div>
+
+  <div class="card" id="r-list">
+    <p class="muted">กำลังโหลด...</p>
+  </div>
+</div>
+
 <div id="profile" class="section">
   <div class="card">
+    <label>ชื่อพนักงาน</label>
+    <input type="text" id="p-name" placeholder="ชื่อ-นามสกุล หรือชื่อเล่นที่ HR รู้จัก" />
     <label>น้ำหนัก (กก.)</label>
     <input type="number" id="p-weight" />
     <label>ส่วนสูง (ซม.)</label>
@@ -148,6 +181,7 @@
       btn.classList.add('active');
       document.getElementById(btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'summary') loadSummary();
+      if (btn.dataset.tab === 'report') loadReport();
     });
   });
 
@@ -191,6 +225,66 @@
     }).catch(function (err) {
       showToast('โหลดสรุปไม่สำเร็จ: ' + err.message, true);
     });
+  }
+
+  var reportDays = 7;
+
+  function setReportRange(days) {
+    reportDays = days;
+    document.querySelectorAll('.seg-btn').forEach(function (b) {
+      b.classList.toggle('active', Number(b.dataset.days) === days);
+    });
+    loadReport();
+  }
+
+  function loadReport() {
+    if (!requireUserId()) return;
+    document.getElementById('r-list').innerHTML = '<p class="muted">กำลังโหลด...</p>';
+    callApi({ action: 'getReport', userId: userId, days: reportDays }).then(function (r) {
+      document.getElementById('r-over').textContent = r.overCount;
+      document.getElementById('r-under').textContent = r.underCount;
+      document.getElementById('r-avg').textContent = r.avgNet;
+
+      var listEl = document.getElementById('r-list');
+      listEl.innerHTML = '';
+      // แสดงวันล่าสุดขึ้นก่อน
+      var days = r.days.slice().reverse();
+      days.forEach(function (day) {
+        var row = document.createElement('div');
+        row.className = 'day-row';
+
+        var dateLabel = document.createElement('span');
+        dateLabel.textContent = formatThaiDate(day.date);
+
+        var right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.alignItems = 'center';
+        right.style.gap = '10px';
+
+        var netLabel = document.createElement('span');
+        netLabel.textContent = day.status === 'none' ? '' : (day.net + ' kcal');
+
+        var badge = document.createElement('span');
+        badge.className = 'day-badge ' + day.status;
+        badge.textContent = day.status === 'over' ? 'เกินเป้า' : (day.status === 'under' ? 'ต่ำกว่าเป้า' : 'ไม่มีข้อมูล');
+
+        right.appendChild(netLabel);
+        right.appendChild(badge);
+        row.appendChild(dateLabel);
+        row.appendChild(right);
+        listEl.appendChild(row);
+      });
+    }).catch(function (err) {
+      showToast('โหลดรายงานไม่สำเร็จ: ' + err.message, true);
+    });
+  }
+
+  function formatThaiDate(isoDate) {
+    var parts = isoDate.split('-');
+    var months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    var day = Number(parts[2]);
+    var month = months[Number(parts[1]) - 1];
+    return day + ' ' + month;
   }
 
   function loadFoodDb() {
@@ -251,6 +345,7 @@
     callApi({
       action: 'saveProfile',
       userId: userId,
+      displayName: document.getElementById('p-name').value,
       weight: Number(document.getElementById('p-weight').value),
       height: Number(document.getElementById('p-height').value),
       age: Number(document.getElementById('p-age').value),
@@ -268,6 +363,7 @@
     if (!requireUserId()) return;
     callApi({ action: 'getProfile', userId: userId }).then(function (p) {
       if (!p.exists) return;
+      if (p.displayName) document.getElementById('p-name').value = p.displayName;
       document.getElementById('p-weight').value = p.weight_kg || '';
       document.getElementById('p-height').value = p.height_cm || '';
       document.getElementById('p-age').value = p.age || '';
@@ -308,6 +404,7 @@
       if (!profile) return; // เคส liff.login() กำลัง redirect อยู่
       userId = profile.userId;
       debugEl.textContent = 'User ID: ' + userId;
+      if (profile.displayName) document.getElementById('p-name').value = profile.displayName;
       loadSummary();
       loadProfile();
     }).catch(function (err) {
