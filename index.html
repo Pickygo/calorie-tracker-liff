@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>บันทึกแคลอรี่</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html { font-size: 18px; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 20px 16px 40px; background: #f5f5f4; color: #222; line-height: 1.5; }
+  h1 { font-size: 1.5rem; margin: 0 0 16px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tab-btn { flex: 1; padding: 14px 4px; border: none; border-radius: 10px; background: #e5e5e3; font-size: 1rem; }
+  .tab-btn.active { background: #06C755; color: #fff; font-weight: bold; }
+  .card { background: #fff; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .row { display: flex; justify-content: space-between; font-size: 1.05rem; padding: 10px 0; }
+  label { display: block; font-size: 0.95rem; color: #555; margin: 16px 0 6px; font-weight: 600; }
+  input, select { width: 100%; padding: 14px; border: 1px solid #ccc; border-radius: 10px; font-size: 1.1rem; background: #fff; }
+  button.submit { width: 100%; margin-top: 20px; padding: 16px; border: none; border-radius: 10px; background: #06C755; color: #fff; font-size: 1.15rem; font-weight: bold; }
+  .section { display: none; }
+  .section.active { display: block; }
+  .muted { color: #888; font-size: 0.9rem; line-height: 1.6; }
+  .progress { height: 12px; background: #eee; border-radius: 6px; overflow: hidden; margin: 12px 0; }
+  .progress-fill { height: 100%; background: #06C755; }
+  .toast { display: none; padding: 14px 16px; border-radius: 10px; font-size: 1rem; margin-bottom: 16px; }
+  .toast.show { display: block; }
+  .toast.ok { background: #e1f5ee; color: #0f6e56; }
+  .toast.err { background: #fcebeb; color: #791f1f; }
+</style>
+</head>
+<body>
+
+<h1>ระบบนับแคลอรี่</h1>
+<div id="toast" class="toast"></div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="summary">สรุป</button>
+  <button class="tab-btn" data-tab="food">อาหาร</button>
+  <button class="tab-btn" data-tab="exercise">ออกกำลังกาย</button>
+  <button class="tab-btn" data-tab="profile">โปรไฟล์</button>
+</div>
+
+<div id="summary" class="section active">
+  <div class="card">
+    <div class="row"><span>กินเข้า</span><b id="s-food">-</b></div>
+    <div class="row"><span>เผาผลาญ</span><b id="s-exercise">-</b></div>
+    <div class="progress"><div class="progress-fill" id="s-bar" style="width:0%"></div></div>
+    <div class="row"><span>เป้าหมาย</span><span id="s-goal">-</span></div>
+    <div class="row"><span>สุทธิวันนี้</span><b id="s-net">-</b></div>
+  </div>
+  <p class="muted">ยังไม่ได้ตั้งค่าโปรไฟล์? ไปที่แท็บ "โปรไฟล์" ก่อนเพื่อให้คำนวณเป้าหมายแคลอรี่ได้ถูกต้อง</p>
+  <p class="muted" id="debug-userid" style="word-break: break-all;">กำลังตรวจสอบผู้ใช้...</p>
+</div>
+
+<div id="food" class="section">
+  <div class="card">
+    <label>มื้อ</label>
+    <select id="meal-type">
+      <option value="เช้า">เช้า</option>
+      <option value="เที่ยง">เที่ยง</option>
+      <option value="เย็น">เย็น</option>
+      <option value="ของว่าง">ของว่าง</option>
+    </select>
+
+    <label>เลือกอาหาร</label>
+    <select id="food-select"></select>
+
+    <label>จำนวน (หน่วย)</label>
+    <input type="number" id="food-qty" value="1" min="0.5" step="0.5" />
+
+    <button class="submit" onclick="submitFood()">บันทึกมื้ออาหาร</button>
+  </div>
+</div>
+
+<div id="exercise" class="section">
+  <div class="card">
+    <label>ประเภท</label>
+    <select id="ex-type">
+      <option value="steps">จำนวนก้าว (คำนวณแคลอรี่ให้อัตโนมัติ)</option>
+      <option value="manual">กรอกแคลอรี่เอง</option>
+    </select>
+
+    <div id="ex-steps-row">
+      <label>จำนวนก้าว</label>
+      <input type="number" id="ex-steps" value="1000" min="0" step="100" />
+    </div>
+
+    <div id="ex-manual-row" style="display:none">
+      <label>กิจกรรม</label>
+      <input type="text" id="ex-activity" placeholder="เช่น วิ่ง, ปั่นจักรยาน" />
+      <label>แคลอรี่ที่เผาผลาญ (kcal)</label>
+      <input type="number" id="ex-manual-kcal" value="0" min="0" />
+    </div>
+
+    <button class="submit" onclick="submitExercise()">บันทึกการออกกำลังกาย</button>
+  </div>
+</div>
+
+<div id="profile" class="section">
+  <div class="card">
+    <label>น้ำหนัก (กก.)</label>
+    <input type="number" id="p-weight" />
+    <label>ส่วนสูง (ซม.)</label>
+    <input type="number" id="p-height" />
+    <label>อายุ</label>
+    <input type="number" id="p-age" />
+    <label>เพศ</label>
+    <select id="p-gender">
+      <option value="male">ชาย</option>
+      <option value="female">หญิง</option>
+    </select>
+    <label>ระดับกิจกรรมในชีวิตประจำวัน</label>
+    <select id="p-activity">
+      <option value="sedentary">นั่งทำงาน แทบไม่ขยับตัว</option>
+      <option value="light" selected>เดินไปมาบ้าง เบาๆ</option>
+      <option value="moderate">ออกกำลังกายปานกลาง 3-5 วัน/สัปดาห์</option>
+      <option value="active">ออกกำลังกายหนักเกือบทุกวัน</option>
+    </select>
+    <button class="submit" onclick="saveProfile()">บันทึกโปรไฟล์</button>
+  </div>
+</div>
+
+<script>
+  // ตั้งค่า 2 ค่านี้ก่อนใช้งานจริง
+  var LIFF_ID = 'YOUR_LIFF_ID';
+  var SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';
+
+  // รายการอาหารฝังไว้ในหน้าเว็บเลย ไม่ต้องรอเรียกข้อมูลจาก Sheet (โหลดเร็วกว่า, ชัวร์กว่า)
+  var FOOD_DB = [{"name": "ข้าวสวย", "calories": 130, "unit": "จาน (1 ทัพพี)"}, {"name": "ข้าวกล้อง", "calories": 150, "unit": "จาน"}, {"name": "ข้าวผัดหมู", "calories": 600, "unit": "จาน"}, {"name": "ข้าวผัดไก่", "calories": 580, "unit": "จาน"}, {"name": "ข้าวผัดกุ้ง", "calories": 550, "unit": "จาน"}, {"name": "ข้าวผัดปู", "calories": 600, "unit": "จาน"}, {"name": "ข้าวผัดอเมริกัน", "calories": 750, "unit": "จาน"}, {"name": "ข้าวผัดกระเพราหมูสับ+ไข่ดาว", "calories": 650, "unit": "จาน"}, {"name": "ข้าวผัดกระเพราไก่+ไข่ดาว", "calories": 600, "unit": "จาน"}, {"name": "ข้าวผัดกระเพราหมูกรอบ", "calories": 700, "unit": "จาน"}, {"name": "ข้าวมันไก่", "calories": 600, "unit": "จาน"}, {"name": "ข้าวหมูแดง", "calories": 550, "unit": "จาน"}, {"name": "ข้าวหมูกรอบ", "calories": 650, "unit": "จาน"}, {"name": "ข้าวขาหมู", "calories": 700, "unit": "จาน"}, {"name": "ข้าวคลุกกะปิ", "calories": 500, "unit": "จาน"}, {"name": "ข้าวไข่เจียว", "calories": 450, "unit": "จาน"}, {"name": "ข้าวไข่ดาว", "calories": 350, "unit": "จาน"}, {"name": "ข้าวราดแกงเขียวหวานไก่", "calories": 530, "unit": "จาน"}, {"name": "ข้าวราดแกงเผ็ดหมูป่า", "calories": 550, "unit": "จาน"}, {"name": "ข้าวราดผัดพริกแกงหมู", "calories": 550, "unit": "จาน"}, {"name": "ข้าวหน้าเป็ด", "calories": 600, "unit": "จาน"}, {"name": "ข้าวต้มหมู", "calories": 250, "unit": "ชาม"}, {"name": "ข้าวต้มไก่", "calories": 230, "unit": "ชาม"}, {"name": "ข้าวต้มปลา", "calories": 220, "unit": "ชาม"}, {"name": "โจ๊กหมู", "calories": 300, "unit": "ชาม"}, {"name": "โจ๊กไข่", "calories": 280, "unit": "ชาม"}, {"name": "ผัดไทยกุ้งสด", "calories": 450, "unit": "จาน"}, {"name": "ผัดไทยหมู", "calories": 420, "unit": "จาน"}, {"name": "ผัดซีอิ๊วหมู", "calories": 500, "unit": "จาน"}, {"name": "ผัดขี้เมาหมู", "calories": 480, "unit": "จาน"}, {"name": "ก๋วยเตี๋ยวหมูน้ำใส", "calories": 350, "unit": "ชาม"}, {"name": "ก๋วยเตี๋ยวหมูน้ำตก", "calories": 400, "unit": "ชาม"}, {"name": "ก๋วยเตี๋ยวเรือ", "calories": 400, "unit": "ชาม"}, {"name": "ก๋วยเตี๋ยวต้มยำ", "calories": 380, "unit": "ชาม"}, {"name": "บะหมี่หมูแดง", "calories": 400, "unit": "ชาม"}, {"name": "บะหมี่เกี๊ยวหมูแดง", "calories": 450, "unit": "ชาม"}, {"name": "เส้นใหญ่ผัดซีอิ๊ว", "calories": 500, "unit": "จาน"}, {"name": "หมี่กรอบ", "calories": 400, "unit": "จาน"}, {"name": "สุกี้น้ำ", "calories": 350, "unit": "ชาม"}, {"name": "สุกี้แห้ง", "calories": 450, "unit": "จาน"}, {"name": "ราดหน้าหมู", "calories": 480, "unit": "จาน"}, {"name": "ราดหน้าทะเล", "calories": 500, "unit": "จาน"}, {"name": "แกงเขียวหวานไก่", "calories": 400, "unit": "จาน (ไม่รวมข้าว)"}, {"name": "แกงเผ็ดหมูป่า", "calories": 420, "unit": "ถ้วย"}, {"name": "แกงมัสมั่นไก่", "calories": 450, "unit": "ถ้วย"}, {"name": "แกงส้ม", "calories": 200, "unit": "ชาม"}, {"name": "แกงจืดเต้าหู้หมูสับ", "calories": 150, "unit": "ชาม"}, {"name": "แกงจืดวุ้นเส้น", "calories": 180, "unit": "ชาม"}, {"name": "ต้มยำกุ้งน้ำใส", "calories": 180, "unit": "ชาม"}, {"name": "ต้มยำกุ้งน้ำข้น", "calories": 280, "unit": "ชาม"}, {"name": "ต้มข่าไก่", "calories": 300, "unit": "ชาม"}, {"name": "ต้มแซ่บกระดูกหมู", "calories": 320, "unit": "ชาม"}, {"name": "ไก่ทอด", "calories": 280, "unit": "ชิ้น"}, {"name": "ไก่ย่าง", "calories": 300, "unit": "ชิ้น"}, {"name": "หมูปิ้ง", "calories": 80, "unit": "ไม้"}, {"name": "ลูกชิ้นปิ้ง", "calories": 50, "unit": "ไม้"}, {"name": "หมูสะเต๊ะ", "calories": 60, "unit": "ไม้"}, {"name": "ไส้กรอกอีสาน", "calories": 150, "unit": "ไม้"}, {"name": "ปีกไก่ทอด", "calories": 220, "unit": "ชิ้น"}, {"name": "ปลาหมึกย่าง", "calories": 150, "unit": "ตัว"}, {"name": "หอยทอด", "calories": 400, "unit": "จาน"}, {"name": "ข้าวเกรียบปากหม้อ", "calories": 150, "unit": "จาน"}, {"name": "ส้มตำไทย", "calories": 120, "unit": "จาน"}, {"name": "ส้มตำปูปลาร้า", "calories": 150, "unit": "จาน"}, {"name": "ลาบหมู", "calories": 250, "unit": "จาน"}, {"name": "ลาบไก่", "calories": 220, "unit": "จาน"}, {"name": "น้ำตกหมู", "calories": 280, "unit": "จาน"}, {"name": "ยำวุ้นเส้น", "calories": 200, "unit": "จาน"}, {"name": "ยำมาม่า", "calories": 350, "unit": "จาน"}, {"name": "ยำทะเล", "calories": 220, "unit": "จาน"}, {"name": "ไข่ต้ม", "calories": 70, "unit": "ฟอง"}, {"name": "ไข่ดาว", "calories": 90, "unit": "ฟอง"}, {"name": "ไข่เจียว", "calories": 220, "unit": "จาน"}, {"name": "ไข่พะโล้", "calories": 120, "unit": "ฟอง"}, {"name": "ขนมปังปิ้งเนยนม", "calories": 300, "unit": "แผ่น"}, {"name": "แซนวิชแฮมชีส", "calories": 350, "unit": "ชิ้น"}, {"name": "เบอร์เกอร์หมู", "calories": 450, "unit": "ชิ้น"}, {"name": "พิซซ่า", "calories": 285, "unit": "ชิ้น (1 ชิ้น)"}, {"name": "เฟรนช์ฟรายส์", "calories": 365, "unit": "ที่เล็ก"}, {"name": "ไก่ทอดฟาสต์ฟู้ด", "calories": 250, "unit": "ชิ้น"}, {"name": "ซาลาเปาหมูสับ", "calories": 200, "unit": "ลูก"}, {"name": "ปาท่องโก๋", "calories": 150, "unit": "คู่"}, {"name": "ข้าวเหนียวหมูปิ้ง", "calories": 400, "unit": "ชุด"}, {"name": "ข้าวเหนียวมะม่วง", "calories": 450, "unit": "จาน"}, {"name": "ข้าวเหนียวสังขยา", "calories": 350, "unit": "จาน"}, {"name": "ทับทิมกรอบ", "calories": 250, "unit": "ถ้วย"}, {"name": "บัวลอย", "calories": 300, "unit": "ถ้วย"}, {"name": "กล้วยบวชชี", "calories": 200, "unit": "ถ้วย"}, {"name": "ขนมชั้น", "calories": 150, "unit": "ชิ้น"}, {"name": "ฝอยทอง", "calories": 180, "unit": "ชิ้น"}, {"name": "ไอศกรีมกะทิ", "calories": 200, "unit": "ถ้วย"}, {"name": "เค้กช็อกโกแลต", "calories": 350, "unit": "ชิ้น"}, {"name": "คุกกี้", "calories": 150, "unit": "ชิ้น (2-3 ชิ้น)"}, {"name": "กาแฟเย็นใส่นมข้น", "calories": 200, "unit": "แก้ว"}, {"name": "กาแฟดำร้อน", "calories": 5, "unit": "แก้ว"}, {"name": "ชาไทยเย็น", "calories": 250, "unit": "แก้ว"}, {"name": "ชาเขียวเย็นหวาน", "calories": 200, "unit": "แก้ว"}, {"name": "น้ำอัดลม", "calories": 150, "unit": "กระป๋อง"}, {"name": "นมจืด", "calories": 130, "unit": "กล่อง"}, {"name": "นมเปรี้ยว", "calories": 130, "unit": "ขวด"}, {"name": "โยเกิร์ต", "calories": 120, "unit": "ถ้วย"}, {"name": "น้ำส้มคั้น", "calories": 110, "unit": "แก้ว"}, {"name": "น้ำมะพร้าว", "calories": 60, "unit": "ลูก"}, {"name": "กล้วยน้ำว้า", "calories": 100, "unit": "ผล"}, {"name": "แอปเปิล", "calories": 95, "unit": "ผล"}, {"name": "ส้ม", "calories": 70, "unit": "ผล"}, {"name": "มะม่วงสุก", "calories": 130, "unit": "ผล"}, {"name": "แตงโม", "calories": 50, "unit": "ชิ้น"}, {"name": "สับปะรด", "calories": 80, "unit": "ถ้วย"}];
+
+  var userId = null;
+
+  function showToast(message, isError) {
+    var el = document.getElementById('toast');
+    el.textContent = message;
+    el.className = 'toast show ' + (isError ? 'err' : 'ok');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () {
+      el.className = 'toast';
+    }, 4000);
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'summary') loadSummary();
+    });
+  });
+
+  document.getElementById('ex-type').addEventListener('change', function (e) {
+    var isSteps = e.target.value === 'steps';
+    document.getElementById('ex-steps-row').style.display = isSteps ? 'block' : 'none';
+    document.getElementById('ex-manual-row').style.display = isSteps ? 'none' : 'block';
+  });
+
+  // เรียก API ของ Apps Script ผ่าน fetch (text/plain เพื่อเลี่ยง CORS preflight)
+  function callApi(payload) {
+    return fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (data) {
+      if (data && data.error) throw new Error(data.error);
+      return data;
+    });
+  }
+
+  function requireUserId() {
+    if (!userId) {
+      showToast('ยังไม่ได้รับข้อมูลผู้ใช้จาก LINE กรุณารอสักครู่แล้วลองใหม่', true);
+      return false;
+    }
+    return true;
+  }
+
+  function loadSummary() {
+    if (!requireUserId()) return;
+    callApi({ action: 'getSummary', userId: userId }).then(function (s) {
+      document.getElementById('s-food').textContent = s.foodTotal + ' kcal';
+      document.getElementById('s-exercise').textContent = s.exerciseTotal + ' kcal';
+      document.getElementById('s-goal').textContent = s.dailyGoal + ' kcal';
+      document.getElementById('s-net').textContent = s.net + ' kcal';
+      document.getElementById('s-bar').style.width = Math.min(Math.max(s.percent, 0), 100) + '%';
+    }).catch(function (err) {
+      showToast('โหลดสรุปไม่สำเร็จ: ' + err.message, true);
+    });
+  }
+
+  function loadFoodDb() {
+    // ดึงจาก FOOD_DB ที่ฝังไว้ในหน้านี้โดยตรง ไม่ต้องรอเรียก server
+    var select = document.getElementById('food-select');
+    select.innerHTML = '';
+    FOOD_DB.forEach(function (item) {
+      var opt = document.createElement('option');
+      opt.value = item.calories;
+      opt.textContent = item.name + ' (' + item.calories + ' kcal/' + item.unit + ')';
+      opt.dataset.name = item.name;
+      select.appendChild(opt);
+    });
+  }
+
+  function submitFood() {
+    if (!requireUserId()) return;
+    var select = document.getElementById('food-select');
+    var opt = select.options[select.selectedIndex];
+    showToast('กำลังบันทึก...', false);
+    callApi({
+      action: 'logFood',
+      userId: userId,
+      mealType: document.getElementById('meal-type').value,
+      foodName: opt ? opt.dataset.name : '',
+      caloriesEach: opt ? Number(opt.value) : 0,
+      quantity: Number(document.getElementById('food-qty').value)
+    }).then(function () {
+      showToast('บันทึกมื้ออาหารแล้ว', false);
+      document.querySelector('[data-tab="summary"]').click();
+    }).catch(function (err) {
+      showToast('บันทึกไม่สำเร็จ: ' + err.message, true);
+    });
+  }
+
+  function submitExercise() {
+    if (!requireUserId()) return;
+    var type = document.getElementById('ex-type').value;
+    var payload = { action: 'logExercise', userId: userId, type: type };
+    if (type === 'steps') {
+      payload.value = Number(document.getElementById('ex-steps').value);
+    } else {
+      payload.caloriesBurned = Number(document.getElementById('ex-manual-kcal').value);
+      payload.value = document.getElementById('ex-activity').value;
+    }
+    showToast('กำลังบันทึก...', false);
+    callApi(payload).then(function () {
+      showToast('บันทึกการออกกำลังกายแล้ว', false);
+      document.querySelector('[data-tab="summary"]').click();
+    }).catch(function (err) {
+      showToast('บันทึกไม่สำเร็จ: ' + err.message, true);
+    });
+  }
+
+  function saveProfile() {
+    if (!requireUserId()) return;
+    showToast('กำลังบันทึก...', false);
+    callApi({
+      action: 'saveProfile',
+      userId: userId,
+      weight: Number(document.getElementById('p-weight').value),
+      height: Number(document.getElementById('p-height').value),
+      age: Number(document.getElementById('p-age').value),
+      gender: document.getElementById('p-gender').value,
+      activityLevel: document.getElementById('p-activity').value
+    }).then(function (res) {
+      showToast('บันทึกโปรไฟล์แล้ว เป้าหมายวันนี้ ' + res.dailyGoalKcal + ' kcal', false);
+      document.querySelector('[data-tab="summary"]').click();
+    }).catch(function (err) {
+      showToast('บันทึกไม่สำเร็จ: ' + err.message, true);
+    });
+  }
+
+  function loadProfile() {
+    if (!requireUserId()) return;
+    callApi({ action: 'getProfile', userId: userId }).then(function (p) {
+      if (!p.exists) return;
+      document.getElementById('p-weight').value = p.weight_kg || '';
+      document.getElementById('p-height').value = p.height_cm || '';
+      document.getElementById('p-age').value = p.age || '';
+      if (p.gender) document.getElementById('p-gender').value = p.gender;
+      if (p.activityLevel) document.getElementById('p-activity').value = p.activityLevel;
+    }).catch(function (err) {
+      showToast('โหลดโปรไฟล์ไม่สำเร็จ: ' + err.message, true);
+    });
+  }
+
+  // เติมรายการอาหารทันที ไม่ต้องรอ liff.init() เสร็จก่อน
+  loadFoodDb();
+
+  var debugEl = document.getElementById('debug-userid');
+  debugEl.textContent = 'liff SDK โหลดสำเร็จ: ' + (typeof liff !== 'undefined');
+
+  // ถ้า liff.init() ไม่เสร็จภายใน 8 วิ ให้ฟ้องออกมาว่าค้าง (กันเงียบแบบไม่รู้สาเหตุ)
+  var initTimedOut = false;
+  var initTimer = setTimeout(function () {
+    initTimedOut = true;
+    debugEl.textContent = 'liff.init ค้างเกิน 8 วินาที ไม่ตอบสนอง (อาจโหลด SDK ไม่สำเร็จ)';
+  }, 8000);
+
+  try {
+    if (typeof liff === 'undefined') {
+      throw new Error('liff SDK ไม่ถูกโหลด (สคริปต์จาก static.line-scdn.net อาจถูกบล็อก)');
+    }
+    liff.init({ liffId: LIFF_ID }).then(function () {
+      clearTimeout(initTimer);
+      if (initTimedOut) return;
+      debugEl.textContent = 'สถานะ: liff.init สำเร็จ, isLoggedIn=' + liff.isLoggedIn();
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+      return liff.getProfile();
+    }).then(function (profile) {
+      if (!profile) return; // เคส liff.login() กำลัง redirect อยู่
+      userId = profile.userId;
+      debugEl.textContent = 'User ID: ' + userId;
+      loadSummary();
+      loadProfile();
+    }).catch(function (err) {
+      clearTimeout(initTimer);
+      var msg = 'liff error: ' + (err && err.message ? err.message : JSON.stringify(err));
+      debugEl.textContent = msg;
+      document.body.insertAdjacentHTML('afterbegin', '<p style="color:red">' + msg + '</p>');
+    });
+  } catch (syncErr) {
+    clearTimeout(initTimer);
+    debugEl.textContent = 'Sync error: ' + syncErr.message;
+    document.body.insertAdjacentHTML('afterbegin', '<p style="color:red">' + syncErr.message + '</p>');
+  }
+</script>
+
+</body>
+</html>
